@@ -1,6 +1,6 @@
-# Residual Quantization for Contextual Bandits
+# Tabular Bandits via Residual Quantization
 
-Code for the paper "Residual Quantization as Structured Uncertainty" (NeurIPS 2026 submission).
+Code for "Tabular Bandits via Residual Quantization" (NeurIPS 2026 submission).
 
 ## Setup
 
@@ -10,45 +10,30 @@ pip install -r requirements.txt
 
 ## Datasets
 
-Download datasets from OpenML:
+All 13 datasets are publicly available from OpenML/UCI. Download:
 ```bash
-python3 scripts/download_datasets.py --datasets adult jannis volkert covertype letter helena
+python3 scripts/download_datasets.py --datasets airlines_delay bng_elevators bng_letter \
+    covertype beer_reviews hepmass higgs kddcup99 miniboone poker_hand skin_segmentation \
+    susy year_prediction
 ```
 
 ## Reproducing Key Results
 
-### Bandit experiments (Table 1-4)
+### Main bandit experiments (Tables 2-3, Figures 2-5)
 
-Run the bandit experiment on a dataset with Optuna HP optimization:
+Run all 6 methods (TS, SGD-LinTS, LinTS + their RQ variants) on a dataset:
 ```bash
 python3 scripts/experiments/run_real_nts_experiment.py \
-    --dataset adult --feature-mode raw \
-    --nbits 2 --d-cut 1 --n-rounds 100000 --n-seeds 10
+    --dataset covertype --feature-mode raw \
+    --nbits 4 --auto-dcut --n-rounds 530000 --n-seeds 30
 ```
 
-### K-sweep (Table 2)
-
-```bash
-for K in 4 8 16 32 64 128 256; do
-    python3 scripts/experiments/run_real_nts_experiment.py \
-        --dataset adult --feature-mode raw \
-        --km-clusters $K --n-rounds 100000 --n-seeds 10
-done
-```
-
-### Contrastive learning (Table 7)
-
-```bash
-python3 scripts/experiments/run_all_experiments.py \
-    --datasets jannis volkert covertype --n-seeds 10
-```
-
-### Synthetic crossover experiment
+### Synthetic crossover experiment (Appendix)
 
 Find the horizon T where deeper RQ beats shallow:
 ```bash
 python3 scripts/synthetic_crossover.py \
-    --T 1000000 --seeds 10 --b 4 --D 10 --max-depth 3
+    --T 1000000 --seeds 10 --b 16 --D 10 --max-depth 5
 ```
 
 ### Significance tests
@@ -60,20 +45,20 @@ python3 scripts/significance_tests.py --alpha 0.05
 ### Depth diagnostic (quantization error)
 
 ```bash
-python3 scripts/diagnostic_quant_error.py --datasets adult covertype jannis
+python3 scripts/diagnostic_quant_error.py --datasets covertype higgs susy
 ```
 
 ## Project Structure
 
 ```
 modules/
-  bandits/          # LinTS, HierTS, cold-start sharing
-  contrastive/      # m-RQ contrastive learning
-  encoders/         # SCARF, ResNet, TabTransformer baselines
+  bandits/          # TS-RQ, SGD-LinTS-RQ, LinTS-RQ with shadow promotion
+  contrastive/      # RQ codebook training via k-means
+  encoders/         # TabNet, SCARF baselines
   data/             # Dataset loading and preprocessing
-  features.py       # Feature extraction, selection, normalization
+  features.py       # Feature extraction and normalization
   embeddings.py     # RQ encoding and reconstruction
-  significance.py   # Statistical tests
+  significance.py   # Statistical tests (Freedman, Bonferroni)
 
 scripts/
   experiments/      # Main experiment scripts
@@ -88,7 +73,30 @@ conf/               # Hydra config files
 
 ## Core Modules
 
-- `modules/bandits/hierarchical_ts.py` — HierTS (O(1) Thompson Sampling on RQ addresses)
-- `modules/bandits/nig_stats.py` — Normal-Inverse-Gamma conjugate sufficient statistics
-- `modules/embeddings.py` — RQ codebook training and encoding
-- `modules/features.py` — Feature extraction with XGBoost importance selection
+- `modules/bandits/hierarchical_ts.py` -- RQ Bandit with shadow promotion (Algorithm 1)
+- `modules/bandits/nig_stats.py` -- Per-cell sufficient statistics
+- `modules/embeddings.py` -- RQ codebook training and greedy encoding
+- `modules/significance.py` -- Freedman-based promotion test
+
+## Deploying to GitHub
+
+To push this code to a GitHub repository:
+
+```bash
+# 1. Create a repo on https://github.com/new (public, no README)
+
+# 2. From the code_release directory:
+cd /tmp && mkdir -p rqb && cd rqb && git init
+cp -r /path/to/code_release/* .
+git add -A && git commit -m "Initial code release"
+git branch -M main
+git remote add origin https://github.com/USERNAME/rqb.git
+git push -u origin main
+
+# 3. For anonymous submission, go to https://anonymous.4open.science/
+#    Paste the repo URL to get an anonymized link for the paper.
+```
+
+## License
+
+MIT
