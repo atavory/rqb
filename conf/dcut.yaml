@@ -1,0 +1,54 @@
+# @package _global_
+# =============================================================================
+# D_cut Diagnostic Configuration
+# =============================================================================
+# Usage: python3 -m scripts.experiments.run_real_nts_experiment --
+
+defaults:
+  - _self_
+
+experiment:
+  dataset: adult
+  nbits: 6
+  feature_mode: embeddings
+
+diagnostic:
+  max_depth: 6
+  n_encoder_seeds: 3
+  seed: 42
+  use_raw_features: false
+
+training:
+  embedding_dim: 64
+  hidden_dim: 128
+  encoder_epochs: 20
+
+output:
+  manifold_bucket: fi_platform_ml_infra_fluent2_bucket
+  manifold_prefix: tree/fi_trunk_tail/dcut
+
+tb_logger:
+  _target_: hydra.utils.instantiate
+  _recursive_: false
+  config:
+    _target_: torchtnt.utils.loggers.meta.tensorboard.TensorBoardLogger
+    path:
+      _target_: pathlib.Path
+      bucket: ${output.manifold_bucket}
+      suffix: tb_fi_trunk_tail_dcut
+
+runner:
+  _target_: runner.hf.DcutRunner
+  dataset: ${experiment.dataset}
+  nbits: ${experiment.nbits}
+  max_depth: ${diagnostic.max_depth}
+  n_encoder_seeds: ${diagnostic.n_encoder_seeds}
+  seed: ${diagnostic.seed}
+  embedding_dim: ${training.embedding_dim}
+  hidden_dim: ${training.hidden_dim}
+  encoder_epochs: ${training.encoder_epochs}
+  manifold_bucket: ${output.manifold_bucket}
+  manifold_prefix: ${output.manifold_prefix}
+  use_raw_features: ${diagnostic.use_raw_features}
+  feature_mode: ${experiment.feature_mode}
+  tb_logger: ${tb_logger}
