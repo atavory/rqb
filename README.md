@@ -1,102 +1,68 @@
-# Tabular Bandits via Residual Quantization
+# Tabular Bandits via Residual Quantization — Algorithm Implementations
 
-Code for "Tabular Bandits via Residual Quantization" (NeurIPS 2026 submission).
+This directory contains the algorithm implementations for the paper
+"Tabular Bandits via Residual Quantization" (NeurIPS 2026).
 
-## Setup
+## Core Algorithms
 
-```bash
-pip install -r requirements.txt
-```
+### Baselines
+| File | Class | Description | Cost/step |
+|------|-------|-------------|-----------|
+| `nig_stats.py` | `NIGStats` | Context-free Thompson Sampling (NIG conjugate prior) | O(K) |
+| `sgd_lints.py` | `SGDLinTS` | Diagonal-precision linear TS (Adagrad-style) | O(dK) |
+| `lints.py` | `LinTSBaseline` | Full-covariance linear TS (Sherman-Morrison updates) | O(d²K) |
 
-## Datasets
+### RQ Methods (with shadow promotion)
+| File | Class | Description | Cost/step |
+|------|-------|-------------|-----------|
+| `counter_rq.py` | `CounterDRQm` | Scalar counters per (level, centroid, arm). No features. | O(ℓK) |
+| `sgd_lints_rq.py` | `SGDLinDRQm` | Diagonal LinTS on residual features per level. | O(ℓdK) |
+| `lints_rq.py` | `LinTSDRQm` | Full-covariance LinTS on residual features per level. | O(ℓd²K) |
 
-All 13 datasets are publicly available from OpenML/UCI. Download:
-```bash
-python3 scripts/download_datasets.py --datasets airlines_delay bng_elevators bng_letter \
-    covertype beer_reviews hepmass higgs kddcup99 miniboone poker_hand skin_segmentation \
-    susy year_prediction
-```
+### Codebook
+| File | Function | Description |
+|------|----------|-------------|
+| `codebook.py` | `train_rq_codebook` | Train FAISS ResidualQuantizer on unlabeled features |
+| `codebook.py` | `encode` | Encode features → per-level centroid indices |
+| `codebook.py` | `compute_residual_features` | Compute per-level residual vectors |
 
-## Reproducing Key Results
+## Key Design Decisions
 
-### Main bandit experiments (Tables 2-3, Figures 2-5)
+- **Shadow promotion**: All RQ methods start at initial depth `min_level` and
+  adaptively increase depth via a shadow level that trains passively. Promotion
+  is gated by a Bonferroni-corrected paired t-test on prediction error.
+- **η-damping**: Scores are summed across levels with `η^(i-1)` weighting
+  (default η=0.5), analogous to learning rate in gradient boosting.
+- **Pseudo-residual targets**: Level i predicts the residual after levels 1..i-1,
+  clipped to [0,1] via σ(z) = clip(z + 0.5, 0, 1).
+- **Inductive codebook**: Codebook is trained on a separate holdout of unlabeled
+  contexts and frozen before the bandit starts.
 
-Run all 6 methods (TS, SGD-LinTS, LinTS + their RQ variants) on a dataset:
-```bash
-python3 scripts/experiments/run_real_nts_experiment.py \
-    --dataset covertype --feature-mode raw \
-    --nbits 4 --auto-dcut --n-rounds 530000 --n-seeds 30
-```
+## Demo
 
-### Synthetic crossover experiment (Appendix)
-
-Find the horizon T where deeper RQ beats shallow:
-```bash
-python3 scripts/synthetic_crossover.py \
-    --T 1000000 --seeds 10 --b 16 --D 10 --max-depth 5
-```
-
-### Significance tests
-
-```bash
-python3 scripts/significance_tests.py --alpha 0.05
-```
-
-### Depth diagnostic (quantization error)
+Run the end-to-end demo on MiniBooNE (downloads automatically, cached):
 
 ```bash
-python3 scripts/diagnostic_quant_error.py --datasets covertype higgs susy
+pip install numpy scipy faiss-cpu
+python demo_miniboone.py
 ```
 
-## Project Structure
-
-```
-modules/
-  bandits/          # TS-RQ, SGD-LinTS-RQ, LinTS-RQ with shadow promotion
-  contrastive/      # RQ codebook training via k-means
-  encoders/         # TabNet, SCARF baselines
-  data/             # Dataset loading and preprocessing
-  features.py       # Feature extraction and normalization
-  embeddings.py     # RQ encoding and reconstruction
-  significance.py   # Statistical tests (Freedman, Bonferroni)
-
-scripts/
-  experiments/      # Main experiment scripts
-  download_datasets.py
-  aggregate_results.py
-  synthetic_crossover.py
-  significance_tests.py
-  diagnostic_quant_error.py
-
-conf/               # Hydra config files
-```
-
-## Core Modules
-
-- `modules/bandits/hierarchical_ts.py` -- RQ Bandit with shadow promotion (Algorithm 1)
-- `modules/bandits/nig_stats.py` -- Per-cell sufficient statistics
-- `modules/embeddings.py` -- RQ codebook training and greedy encoding
-- `modules/significance.py` -- Freedman-based promotion test
-
-## Deploying to GitHub
-
-To push this code to a GitHub repository:
-
+Options:
 ```bash
-# 1. Create a repo on https://github.com/new (public, no README)
-
-# 2. From the code_release directory:
-cd /tmp && mkdir -p rqb && cd rqb && git init
-cp -r /path/to/code_release/* .
-git add -A && git commit -m "Initial code release"
-git branch -M main
-git remote add origin https://github.com/USERNAME/rqb.git
-git push -u origin main
-
-# 3. For anonymous submission, go to https://anonymous.4open.science/
-#    Paste the repo URL to get an anonymized link for the paper.
+python demo_miniboone.py --n-runs 5          # more seeds
+python demo_miniboone.py --max-rounds 10000  # quick test
+python demo_miniboone.py --d-cut 2 --nbits 4 # shallower codebook
 ```
 
-## License
+This downloads MiniBooNE from UCI (~80MB), trains an RQ codebook on a 5K
+holdout, and runs all 6 methods, printing regret rates, wall-clock timing,
+and shadow promotion events.
 
-MIT
+## Dependencies
+
+```
+pip install numpy scipy faiss-cpu
+```
+
+No torch required. The demo uses a lightweight numpy NIG implementation
+for context-free Thompson Sampling.
